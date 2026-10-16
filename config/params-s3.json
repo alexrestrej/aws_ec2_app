@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "pS3RestoreBucket",
+    "ParameterValue": "#{s3-bucket-name-restore}#"
+  },
+  {
+    "ParameterKey": "pAppBucketName",
+    "ParameterValue": "#{s3-bucket}#"
+  },
+  {
+      "ParameterKey": "pAccessControl",
+      "ParameterValue": "#{s3-access-control}#"
+  },
+  {
+      "ParameterKey": "pImportBase",
+      "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+  },
+  {
+      "ParameterKey": "pEnvironment",
+      "ParameterValue": "#{env}#"
+  },
+  {
+      "ParameterKey": "pSftpRol",
+      "ParameterValue": "#{sftp-arn-rol}#"
+  },
+  {
+    "ParameterKey": "pPsKmsArn",
+    "ParameterValue": "#{ps-kms-arn}#"
+}
+]

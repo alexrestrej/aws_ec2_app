@@ -1,0 +1,359 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This template create a Secret Manager with the values to manage the DB credentials
+
+Parameters:
+
+##General parameters###
+  pPSKMS:
+    Description: KMS value in Parameter Store
+    Type: String
+
+  pEnvironment:
+    Description: Application Environment
+    Type: String
+
+  pVpc:
+    Description: EC2 APP VPC
+    Type: String
+
+  pASGSubnet1:
+    Description: Subnet for ASG
+    Type: String
+
+  pASGSubnet2:
+    Description: Subnet for ASG
+    Type: String
+
+  pArnrole:
+    Description: ASG arn value
+    Type: String     
+
+###Database1 db parameters####
+
+
+  pUsernameDatabase1:
+    Description: Database UserName for Database1
+    Type: String   
+
+  pHostnameDatabase1:
+    Description: Database Hostname/IP for Database1
+    Type: String     
+  
+  pPasswordDatabase1:
+    Description: Database Password of Database1
+    Type: String
+    NoEcho: true  
+
+  pProfilenameDatabase1:
+    Description: Database Profile Name
+    Type: String
+  
+  pProviderDatabase1:
+    Description: Database Provider for Database1
+    Type: String
+
+  pBdNameDatabase1:
+    Description: Database DBName for Database1
+    Type: String
+
+  pParametrosAdDatabase1:
+    Description: Additional Parameters for Database1
+    Type: String
+
+  pSecurityTypeDatabase1:
+    Description: Additional Security Type for Database1
+    Type: String  
+    
+  pMotorBDDatabase1:
+    Description: Additional Motor BD for Database1
+    Type: String  
+    
+###bdSim DB Parameters##### 
+
+  pUsernameDatabase2:
+    Description: Database UserName
+    Type: String   
+
+  pHostnameDatabase2:
+    Description: Database Hostname/IP
+    Type: String     
+  
+  pPasswordDatabase2:
+    Description: Database Password
+    Type: String
+    NoEcho: true  
+
+  pProfilenameDatabase2:
+    Description: Database Profile Name
+    Type: String
+  
+  pProviderDatabase2:
+    Description: Database Provider
+    Type: String
+
+  pBdNameDatabase2:
+    Description: Database DBName
+    Type: String
+
+  pParametrosAdDatabase2:
+    Description: Additional Parameters
+    Type: String
+
+  pSecurityTypeDatabase2:
+    Description: Additional Security Type
+    Type: String  
+    
+  pMotorDatabase2:
+    Description: Additional Motor
+    Type: String
+###Database3 db parameters####
+
+
+  pUsernameDatabase3:
+    Description: Database UserName for Database3
+    Type: String   
+
+  pHostnameDatabase3:
+    Description: Database Hostname/IP for Database3
+    Type: String     
+  
+
+  pPasswordDatabase3:
+    Description: Database Password of Database3
+    Type: String
+    NoEcho: true  
+
+  pProfilenameDatabase3:
+    Description: Database Profile Name
+    Type: String
+  
+  pProviderDatabase3:
+    Description: Database Provider for Database3
+    Type: String
+
+  pBdNameDatabase3:
+    Description: Database DBName for Database3
+    Type: String
+
+  pParametrosAdDatabase3:
+    Description: Additional Parameters for Database3
+    Type: String
+
+  pSecurityTypeDatabase3:
+    Description: Additional Security Type for Database3
+    Type: String  
+    
+  pMotorDatabase3:
+    Description: Additional Motor BD for Database3
+    Type: String  
+####    
+  
+
+
+Conditions:
+
+  notPdn:
+     !Not [!Or [!Equals [!Ref pEnvironment, "prod"], !Equals [!Ref pEnvironment, "pdn"] ] ]
+
+  cAditionalEc2:
+    Fn::Or:
+      - Fn::Equals: [Ref: pEnvironment, qa]
+      - Fn::Equals: [Ref: pEnvironment, pdn] 
+
+Resources:  
+  
+###secret 1####
+
+  rSecretBDDatabase1:
+    Description: Secret to store user password of Database1 SQL DataBase
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Join ["", [!Ref 'AWS::StackName', "-bd-Database1-sm"]]
+      Description: Secret to store user password of DB Database1 SQL DataBase
+      KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      SecretString:
+        !Join ["", ["{\"username\":\"", !Ref pUsernameDatabase1,"\",",
+        "\"hostname\":\"", !Ref pHostnameDatabase1,"\",",
+        "\"password\":\"", !Ref pPasswordDatabase1, "\",",
+        "\"profilename\":\"", !Ref pProfilenameDatabase1, "\",",
+        "\"provider\":\"", !Ref pProviderDatabase1, "\",",
+        "\"bdname\":\"", !Ref pBdNameDatabase1, "\",",
+        "\"parametrosad\":\"", !Ref pParametrosAdDatabase1, "\",",
+        "\"securitytype\":\"", !Ref pSecurityTypeDatabase1, "\",",
+        "\"motordb\":\"", !Ref pMotorBDDatabase1, "\"}"
+        ]]
+
+###secret policy 1###
+
+
+  rSecretBDDatabase1ResourcePolicy:
+    Description: Resource Policy for rSecretBDDatabase1
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties: 
+      SecretId: !Ref rSecretBDDatabase1
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Ref pArnrole
+          Action: secretsmanager:GetSecretValue
+          Resource: !Ref rSecretBDDatabase1
+          Condition:
+            StringEquals:
+              aws:SourceVpce: !Ref pVpc
+            IpAddress:
+              aws:VpcSourceIp: [!Ref pASGSubnet1, !Ref pASGSubnet2]
+        - Effect: Deny
+          Principal:
+            AWS: "*"
+          Action: secretsmanager:GetSecretValue
+          Resource: "*"
+          Condition:
+            StringNotEquals:
+              aws:PrincipalArn: 
+                - !Ref pArnrole              
+                - !Sub arn:aws:sts::${AWS::AccountId}:assumed-role/YOUR_DEPLOYMENT_ROLE_NAME
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/YOUR_DEPLOYMENT_ROLE_NAME
+                - !Sub arn:aws:sts::${AWS::AccountId}:root       
+                - !Sub arn:aws:*::${AWS::AccountId}:*role/YOUR_DEPLOYMENT_ROLE_NAME*
+
+                      
+
+###secret 2######                 
+
+  rSecretDatabase2:
+    Description: Secret to store user password of Database2 SQL DataBase
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Join ["", [!Ref 'AWS::StackName', "-bd-Database2-sm"]]
+      Description: Secret to store user password of Database2 SQL DataBase
+      KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      SecretString:
+        !Join ["", ["{\"username\":\"", !Ref pUsernameDatabase2,"\",",
+        "\"hostname\":\"", !Ref pHostnameDatabase2,"\",",
+        "\"password\":\"", !Ref pPasswordDatabase2, "\",",
+        "\"profilename\":\"", !Ref pProfilenameDatabase2, "\",",
+        "\"provider\":\"", !Ref pProviderDatabase2, "\",",
+        "\"bdname\":\"", !Ref pBdNameDatabase2, "\",",
+        "\"parametrosad\":\"", !Ref pParametrosAdDatabase2, "\",",
+        "\"securitytype\":\"", !Ref pSecurityTypeDatabase2, "\",",
+        "\"motordb\":\"", !Ref pMotorDatabase2, "\"}"
+        ]]
+
+#####policy secret2####
+
+  rSecretDatabase2ResourcePolicy:
+    Description: Resource Policy for rSecretDatabase2
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties: 
+      SecretId: !Ref rSecretDatabase2
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Ref pArnrole
+          Action: secretsmanager:GetSecretValue
+          Resource: !Ref rSecretDatabase2
+          Condition:
+            StringEquals:
+              aws:SourceVpce: !Ref pVpc
+            IpAddress:
+              aws:VpcSourceIp: [!Ref pASGSubnet1, !Ref pASGSubnet2]
+        - Effect: Deny
+          Principal:
+            AWS: "*"
+          Action: secretsmanager:GetSecretValue
+          Resource: "*"
+          Condition:
+            StringNotEquals:
+              aws:PrincipalArn:
+                - !Ref pArnrole
+                - !Sub arn:aws:sts::${AWS::AccountId}:assumed-role/YOUR_DEPLOYMENT_ROLE_NAME
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/YOUR_DEPLOYMENT_ROLE_NAME
+                - !Sub arn:aws:sts::${AWS::AccountId}:root       
+                - !Sub arn:aws:*::${AWS::AccountId}:*role/YOUR_DEPLOYMENT_ROLE_NAME*
+
+###secret 3######                 
+
+  rSecretDatabase3:
+    Description: Secret to store user password of Database3 SQL DataBase
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Join ["", [!Ref 'AWS::StackName', "-bd-Database3-sm"]]
+      Description: Secret to store user password of DBDatabase3 SQL DataBase
+      KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+      SecretString:
+        !Join ["", ["{\"username\":\"", !Ref pUsernameDatabase3,"\",",
+        "\"hostname\":\"", !Ref pHostnameDatabase3,"\",",
+        "\"password\":\"", !Ref pPasswordDatabase3, "\",",
+        "\"profilename\":\"", !Ref pProfilenameDatabase3, "\",",
+        "\"provider\":\"", !Ref pProviderDatabase3, "\",",
+        "\"bdname\":\"", !Ref pBdNameDatabase3, "\",",
+        "\"parametrosad\":\"", !Ref pParametrosAdDatabase3, "\",",
+        "\"securitytype\":\"", !Ref pSecurityTypeDatabase3, "\",",
+        "\"motordb\":\"", !Ref pMotorDatabase3, "\"}"
+        ]]
+
+#####policy secret3####
+
+  rSecretDatabase3ResourcePolicy:
+    Description: Resource Policy for rSecretDatabase3
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties: 
+      SecretId: !Ref rSecretDatabase3
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Ref pArnrole
+          Action: secretsmanager:GetSecretValue
+          Resource: !Ref rSecretDatabase3
+          Condition:
+            StringEquals:
+              aws:SourceVpce: !Ref pVpc
+            IpAddress:
+              aws:VpcSourceIp: [!Ref pASGSubnet1, !Ref pASGSubnet2]
+        - Effect: Deny
+          Principal:
+            AWS: "*"
+          Action: secretsmanager:GetSecretValue
+          Resource: "*"
+          Condition:
+            StringNotEquals:
+              aws:PrincipalArn:
+                - !Ref pArnrole
+                - !Sub arn:aws:sts::${AWS::AccountId}:assumed-role/YOUR_DEPLOYMENT_ROLE_NAME
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/YOUR_DEPLOYMENT_ROLE_NAME
+                - !Sub arn:aws:sts::${AWS::AccountId}:root       
+                - !Sub arn:aws:*::${AWS::AccountId}:*role/YOUR_DEPLOYMENT_ROLE_NAME*
+
+###secrets parameter store###
+
+  rSecretDatabase1ParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The load ARN Secret Manager for Database1 DB on parameter store
+      Type: String
+      Name: !Join ["-", [!Ref 'AWS::StackName', "db-Database1"]]
+      Value: !Ref rSecretBDDatabase1
+
+  rSecretDatabase2ParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The load ARN Secret Manager for Database2 DB on parameter store
+      Type: String
+      Name: !Join ["-", [!Ref 'AWS::StackName', "db-Database2"]]
+      Value: !Ref rSecretDatabase2
+
+
+  rSecretDatabase3ParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: The load ARN Secret Manager for Database3 DB on parameter store
+      Type: String
+      Name: !Join ["-", [!Ref 'AWS::StackName', "db-Database3"]]
+      Value: !Ref rSecretDatabase3

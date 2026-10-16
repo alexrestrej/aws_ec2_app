@@ -1,0 +1,122 @@
+[
+    {
+        "ParameterKey": "pImageEC2",
+        "ParameterValue": "#{app-ami}#"
+    },
+    {
+        "ParameterKey": "pSubnet1",
+        "ParameterValue": "#{subnet-app-1}#"
+    },
+    {
+        "ParameterKey": "pSubnet2",
+        "ParameterValue": "#{subnet-app-2}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pInstanceType",
+        "ParameterValue": "#{app-instance-type}#"
+    },
+    {
+        "ParameterKey": "pServername",
+        "ParameterValue": "#{app-server-name}#"
+    },
+    {
+        "ParameterKey": "pPsgEc2",
+        "ParameterValue": "#{ps-sg-ec2}#"
+    },
+    {
+        "ParameterKey": "pSecretCert",
+        "ParameterValue": "#{app-arn-sm-cert}#"
+    },
+    {
+        "ParameterKey": "pSecretCert2",
+        "ParameterValue": "#{app-arn-sm-cert2}#"
+    },
+    {
+        "ParameterKey": "pCerCommonName",
+        "ParameterValue": "#{app-cert-common-name}#"
+    },
+    {
+        "ParameterKey": "pCerSans",
+        "ParameterValue": "#{app-cert-sans}#"
+    },
+    {
+        "ParameterKey": "pCerCommonName2",
+        "ParameterValue": "#{app-cert-common-name2}#"
+    },
+    {
+        "ParameterKey": "pCerSans2",
+        "ParameterValue": "#{app-cert-sans2}#"
+    },
+    {
+        "ParameterKey": "pCerPkiArn",
+        "ParameterValue": "#{cer-pki-arn}#"
+    },
+    {
+        "ParameterKey": "pPsKmsArn",
+        "ParameterValue": "#{ps-kms-arn}#"
+    },
+    {
+        "ParameterKey": "pPSKMS",
+        "ParameterValue": "#{ps-kms}#"
+    },
+    {
+        "ParameterKey": "pCustomKMS",
+        "ParameterValue": "#{arn-kms-shared}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    },
+    {
+        "ParameterKey": "pImportBaseShared",
+        "ParameterValue": "#{shared-secret-base}#"
+    },
+    {
+        "ParameterKey": "pBucketName",
+        "ParameterValue": "#{s3-bucket}#"
+    },
+    {
+        "ParameterKey": "pTypeDisk",
+        "ParameterValue": "#{app-type-disk}#"
+    },
+    {
+        "ParameterKey": "pInstanceSize",
+        "ParameterValue": "#{ec2-type-size}#"
+    },
+    {
+        "ParameterKey": "pSubnet1",
+        "ParameterValue": "#{subnet-app-1}#"
+    },
+    {
+        "ParameterKey": "pSubnet2",
+        "ParameterValue": "#{subnet-app-2}#"
+    },
+    {
+        "ParameterKey": "pVpc",
+        "ParameterValue": "#{vpc}#"
+    },
+    {
+        "ParameterKey": "pIPPrimary",
+        "ParameterValue": "#{app-ip-primary}#"
+    },
+        {
+        "ParameterKey": "pDeploymentgroupname",
+        "ParameterValue": "#{azagent-dg-name}#"
+    },
+    {
+        "ParameterKey": "pDeploymentgroupPath",
+        "ParameterValue": "#{deployment-group-path}#"
+    },
+    {
+        "ParameterKey": "pDeploymentGroupRoleArn",
+        "ParameterValue": "#{deployment-group-role-arn}#"
+    },
+    {
+        "ParameterKey": "pS3LogsALB",
+        "ParameterValue": "#{s3-bucket-logs-alb}#"
+    }
+]

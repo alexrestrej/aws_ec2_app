@@ -1,0 +1,98 @@
+[
+    {
+        "ParameterKey": "pSubnet1",
+        "ParameterValue": "#{subnet-app-1}#"
+    },
+    {
+        "ParameterKey": "pSubnet2",
+        "ParameterValue": "#{subnet-app-2}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pInstanceType",
+        "ParameterValue": "#{reporting-instance-type}#"
+    },
+    {
+        "ParameterKey": "pServername",
+        "ParameterValue": "#{reporting-server-name}#"
+    },
+    {
+        "ParameterKey": "pPsReporting",
+        "ParameterValue": "#{ps-sg-reporting}#"
+    },
+    {
+        "ParameterKey": "pPsKmsArn",
+        "ParameterValue": "#{ps-kms-arn}#"
+    },
+    {
+        "ParameterKey": "pPSKMS",
+        "ParameterValue": "#{ps-kms}#"
+    },
+    {
+        "ParameterKey": "pImportBase",
+        "ParameterValue": "#{application-code}#-#{project-name}#-#{env}#"
+    },
+    {
+        "ParameterKey": "pCustomKMS",
+        "ParameterValue": "#{arn-kms-shared}#"
+    },
+    {
+        "ParameterKey": "pPSKMS",
+        "ParameterValue": "#{ps-kms}#"
+    },
+    {
+        "ParameterKey": "pCerPkiArn",
+        "ParameterValue": "#{cer-pki-arn}#"
+    },
+    {
+        "ParameterKey": "pCerCommonName",
+        "ParameterValue": "#{reporting-cert-common-name}#"
+    },
+    {
+        "ParameterKey": "pCerSans",
+        "ParameterValue": "#{reporting-cert-sans}#"
+    },
+    {
+        "ParameterKey": "pVpc",
+        "ParameterValue": "#{vpc}#"
+    },
+    {
+        "ParameterKey": "pSecretCert",
+        "ParameterValue": "#{reporting-arn-sm-cert}#"
+    },
+    {
+        "ParameterKey": "pTypeDisk",
+        "ParameterValue": "#{reporting-type-disk}#"
+    },
+    {
+        "ParameterKey": "pSizeDisk",
+        "ParameterValue": "#{reporting-size-disk}#"
+    },
+    {
+        "ParameterKey": "pSizeDisk2",
+        "ParameterValue": "#{reporting-size-disk2}#"
+    },
+    {
+        "ParameterKey": "pSizeDisk3",
+        "ParameterValue": "#{reporting-size-disk3}#"
+    },
+    {
+        "ParameterKey": "pSizeDisk4",
+        "ParameterValue": "#{reporting-size-disk4}#"
+    },
+    {
+        "ParameterKey": "pIPPrimary",
+        "ParameterValue": "#{reporting-ip-primary}#"
+    },
+    {
+        "ParameterKey": "pImageEC2",
+        "ParameterValue": "#{reporting-ami}#"
+    },
+    {
+        "ParameterKey": "pBucketName",
+        "ParameterValue": "#{s3-bucket-name-restore}#"
+    }    
+]

@@ -1,0 +1,713 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Ec2 para reporting Application"
+############################## Parameters ####################################################
+Parameters:
+
+  pInstanceType:
+    Description: EC2 instance type
+    Type: String
+
+  pIPPrimary:
+    Description: Instance Primary IP
+    Type: String       
+
+  pImageEC2:
+    Description: EC2 Instance AMI
+    Type: String
+
+  pSubnet1:
+    Description: subnet 1 
+    Type: String
+
+  pSubnet2:
+    Description: subnet 2
+    Type: String   
+
+  pPsReporting:
+    Description: Parameter store security group Reporting
+    Type: String
+
+  pVpc:
+    Description: EC2 Reporting VPC
+    Type: String
+
+  pSecretCert:
+    Description: ARN Secret cer
+    Type: String      
+
+  pEnvironment:
+    Description: Environment
+    Type: String
+
+  pServername:
+    Description: Reporting server name.
+    Type: String
+
+  pPSKMS:
+    Description: KMS value in the Parameter Store
+    Type: String      
+
+  pPsKmsArn:
+    Description: ARN KMS value in the Parameter Store
+    Type: String
+
+  pImportBase:
+    Description: Name base for the resources of this stack
+    Type: String
+
+  pCustomKMS:
+    Description: Custom KMS for shared services
+    Type: String
+
+  pSizeDisk:
+    Type: String
+    Description: disk 1 size    
+    
+  pSizeDisk2:
+    Type: String
+    Description: disk 2 size     
+    
+  pSizeDisk3:
+    Type: String
+    Description: disk 3 size  
+    
+  pSizeDisk4:
+    Type: String
+    Description: disk 4 size    
+
+  pTypeDisk:
+    Type: String
+    Description: Reporting disk type  
+
+  pBucketName:
+    Type: String
+    Description: The S3 bucket name that contains the resources    
+
+
+##Certificados
+  pCerCommonName:
+    Description: Common Name for Certificate 01.
+    Type: String
+
+  pCerSans:
+    Description: SANS for Certificate 01.
+    Type: String
+
+  pCerPkiArn:
+    Description: The ARN of the SNS topic used to request a PKI Certificate.
+    Type: String    
+
+##Fin certificados##
+
+Conditions:
+
+  enableCustomKMS:
+    !Not [!Equals [!Ref pCustomKMS, ""] ]
+
+################ certificados ############################
+Resources:  
+  KMSKeyCertificate01:
+    Type: AWS::KMS::Key
+    Properties:
+      Enabled: True
+      EnableKeyRotation: True
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Join ['', ['arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':root']]
+          Action: kms:*
+          Resource: "*"
+        - Effect: Allow
+          Principal:
+            AWS:
+            - !Join ['', ['arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':role/pki']]
+          Action:
+          - kms:Decrypt
+          - kms:GenerateDataKey
+          Resource: "*"
+          Condition:
+            StringEquals:
+              kms:ViaService: !Join ['', ['secretsmanager.', !Ref 'AWS::Region', '.amazonaws.com']]
+        - Effect: Allow
+          Principal:
+            AWS:
+            - !GetAtt rEC2ReportingRole.Arn
+          Action:
+          - kms:Decrypt
+          Resource: "*"
+          Condition:
+            StringEquals:
+              kms:ViaService: !Join ['', ['secretsmanager.', !Ref 'AWS::Region', '.amazonaws.com']]
+
+#   ## Certificado Digital 01 - SecretsManager
+
+  SecretCertificateEC201:
+    Type: AWS::SecretsManager::Secret
+    Properties: 
+      Description: EC2 Reporting secret cert
+      KmsKeyId: !Ref KMSKeyCertificate01
+      SecretString: ' '
+      Name:
+        Fn::Join: ["-", [ Ref: "AWS::StackName" , "SecretCertEC2"]]      
+
+  SecretsManagerResourcePolicyCertificateEC201:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties: 
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Join ['', ['arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':role/pki']]
+          Action: secretsmanager:PutSecretValue
+          Resource: !Ref SecretCertificateEC201
+        - Effect: Allow
+          Principal:
+            AWS: !GetAtt rEC2ReportingRole.Arn
+          Action: secretsmanager:GetSecretValue
+          Resource: !Ref SecretCertificateEC201
+          Condition:
+            StringEquals:
+              aws:SourceVpce: !Ref pVpc
+            IpAddress:
+              aws:VpcSourceIp: [!Ref pSubnet1, !Ref pSubnet2]
+        - Effect: Deny
+          Principal:
+            AWS: "*"
+          Action: secretsmanager:GetSecretValue
+          Resource: "*"
+          Condition:
+            StringNotEquals:
+              aws:PrincipalArn: !GetAtt rEC2ReportingRole.Arn              
+      SecretId: !Ref SecretCertificateEC201
+
+# ## Certificado Digital 01 - InternalDigitalCertificate
+
+  InternalCertificateEC201:
+    DependsOn:
+    - SecretsManagerResourcePolicyCertificateEC201
+    Type: Custom::InternalDigitalCertificate
+    Properties: 
+      ServiceToken: !Ref pCerPkiArn
+      common_name: !Ref pCerCommonName
+      subject_alternative_names: !Ref pCerSans
+      aws_service: EC2
+      key_type: RSA2048
+      secret_arn: !Ref SecretCertificateEC201
+## finaliza confiuracion certificados
+
+############################## EC2 ENI ###############
+  rENIEc2Reporting:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Description: EC2 ENI configuration 
+      PrivateIpAddresses: 
+        - Primary: true
+          PrivateIpAddress: !Ref pIPPrimary 
+      GroupSet: 
+        - !Ref pPsReporting
+      SubnetId: !Ref pSubnet1
+#########################End Eni Configuration######################
+  rEC2ReportingInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    Properties:
+      DisableApiTermination: True
+      Monitoring: True
+      #Todo parametor que se toque en la seccion NetworkInterfaces, recreara la instancia ec2
+      NetworkInterfaces: 
+      - NetworkInterfaceId:
+          Ref: rENIEc2Reporting
+        DeviceIndex: "0" 
+      InstanceType: !Ref pInstanceType
+      ImageId: !Ref pImageEC2
+      IamInstanceProfile: !Ref rEC2ReportingProfile
+
+      UserData:
+       Fn::Base64:
+         Fn::Sub:
+          - |
+            <powershell>
+              Start-Transcript -Path "C:\UserData.log" -Append
+
+              echo "Configuracion Time-zone"
+              Set-TimeZone -Name "SA Pacific Standard Time"
+
+              & "C:\Program Files\Amazon\AmazonCloudWatchAgent\amazon-cloudwatch-agent-ctl.ps1" -a append-config -m ec2 -c file:"C:/temp/CW_Logs_APPLICATION_Reporting.json" -s
+
+              echo "Descarga contenido en el S3 para app y features"
+              aws s3 cp s3://${_AppBucketName}/Features/  C:\temp --recursive              
+
+              Start-Sleep -Seconds 10              
+
+              echo "Importar certificados"
+              New-Item -Path "D:\" -Name "Certificados" -ItemType "directory"
+              $Getsecret = Get-SECSecretValue -SecretId ${SecretCert}
+              $Secretjson = $Getsecret.SecretString | ConvertFrom-Json
+              $Secretjson.cer > D:\Certificados\cert.cer
+              $Secretjson.chain > D:\Certificados\chain.cer
+              $Secretjson.key > D:\Certificados\cert.key
+              $pass = $Secretjson.passphrase
+              certutil -p *,$pass -mergepfx D:\Certificados\cert.cer D:\Certificados\cert.pfx
+
+              echo "importar un certificado al almacen de certificados de ec2"
+              Import-Certificate -FilePath "D:\Certificados\cert.cer" -CertStoreLocation cert:\LocalMachine\my
+              Import-Certificate -FilePath "D:\Certificados\chain.cer" -CertStoreLocation cert:\LocalMachine\root
+              Import-Certificate -FilePath "D:\Certificados\chain.cer" -CertStoreLocation cert:\LocalMachine\CA
+
+              echo "importar llave privada al almacen de certificados"
+              $secretPFX=aws secretsmanager --region us-east-1 get-secret-value --secret-id ${SecretCert} --query SecretString --version-stage AWSCURRENT --output text
+              $passwordsec = ConvertFrom-Json -InputObject $secretPFX | select -expand passphrase
+              $stringSecretCert = "$passwordsec"
+              $password = ConvertTo-SecureString -String $stringSecretCert -Force -AsPlainText
+              $Rimport = Import-PfxCertificate -FilePath "D:\Certificados\cert.pfx" -CertStoreLocation Cert:\Localmachine\My -Password $password
+              $Rimport = Import-PfxCertificate -FilePath "D:\Certificados\cert.pfx" -CertStoreLocation Cert:\Localmachine\root -Password $password
+              echo "import result: $Rimport"
+
+              echo "Configuracion Time-zone"
+              Set-TimeZone -Name "SA Pacific Standard Time"
+
+
+              echo "Habilitar metricas de CW"
+              & "C:\Program Files\Amazon\AmazonCloudWatchAgent\amazon-cloudwatch-agent-ctl.ps1" -a append-config -m ec2 -c file:"C:/Temp/CW_Logs_APPLICATION_Reporting.json" -s
+              WaitForMSIMutex
+
+              echo "tags"
+              $AWS_AVAIL_ZONE=(curl http://169.254.169.254/latest/meta-data/placement/availability-zone -UseBasicParsing).Content
+              echo $AWS_AVAIL_ZONE
+              $AWS_REGION=$AWS_AVAIL_ZONE.Substring(0,$AWS_AVAIL_ZONE.length-1)
+              echo $AWS_REGION
+              $AWS_INSTANCE_ID=(curl http://169.254.169.254/latest/meta-data/instance-id -UseBasicParsing).Content
+              echo $AWS_INSTANCE_ID
+                $Tags = @( @{key="example:application-code";value="YOUR_APP_CODE"}, `
+                          @{key="example:business-service";value="YOUR_BUSINESS_SERVICE"}, `
+                          @{key="example:environment";value="${_Environment}"}, `
+                          @{key="example:pmo";value="YOUR_PMO_CODE"}, `
+                          @{key="example:cost-center";value="YOUR_COST_CENTER"}, `
+                          @{key="example:project-name";value="YOUR_PROJECT_NAME"}, `
+                          @{key="Name";value="YOUR_APP_CODE-YOUR_PROJECT_NAME"}, `
+                          @{key="example:info-finan-conta-legal";value=""}, `
+                          @{key="bia";value="no"}, `
+                          @{key="example:dominio-informacion";value="YOUR_BUSINESS_DOMAIN"}, `
+                          @{key="example:datos-personales";value="personal-data"}, `
+                          @{key="example:cumplimiento";value="no"}, `
+                          @{key="example:clasificacion-confidencialidad";value="confidencial"}, `
+                          @{key="example:clasificacion-integridad";value="impacto moderado"}, `
+                          @{key="example:clasificacion-disponibilidad";value="impacto tolerable"} )
+              echo $Tags
+              $volumes = (Get-EC2Instance -Region $AWS_REGION -InstanceId $AWS_INSTANCE_ID).Instances.BlockDeviceMappings.Ebs.VolumeId
+              foreach ($volume in $volumes)
+              {
+              New-EC2Tag -Resource $volume -Region $AWS_REGION -Tag $Tags
+              }
+
+              # "Set standard server name"
+              $finalHostname="${_ServerName}"
+              Rename-Computer -NewName $finalHostname -Verbose
+
+              
+              echo "This is quite slow, I already finished all my work, let's reboot."
+              Stop-Transcript
+              Restart-Computer
+
+            </powershell>
+          -
+            _Environment: !Ref pEnvironment
+            _ServerName: !Ref pServername
+            SecretCert: !Ref pSecretCert
+            _AppBucketName: !Ref pBucketName            
+
+##########Disk Configuration#################################            
+
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: 'false'
+            VolumeSize: 130 
+            VolumeType: !Ref pTypeDisk 
+            Iops: "3000"          
+            Encrypted: 'true' 
+            KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+        - DeviceName: /dev/sdb
+          Ebs:
+            DeleteOnTermination: 'false'
+            VolumeSize: 60
+            VolumeType: !Ref pTypeDisk
+            Iops: "3000"
+            Encrypted: 'true' 
+            KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref 'AWS::StackName']]        
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no"   
+        - Key: "example:bkdiario"
+          Value: "ec2"
+        - Key: "example:bkmensual"
+          Value: "ec2"   
+
+
+  rEC2ReportingDisk:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain  
+    Properties: 
+      AvailabilityZone: us-east-1a
+      Encrypted: true
+      KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+      Size: !Ref pSizeDisk
+      VolumeType: !Ref pTypeDisk
+      Tags: 
+        # - Key: Name
+        #   Value: !Join ["-", [!Ref 'AWS::StackName']]       
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no" 
+        - Key: "example:bkmensual"
+          Value: "ebs"
+        - Key: "example:bkdiario"
+          Value: "ebs"
+
+  rAttachmentReportingDisk:      
+    Type: AWS::EC2::VolumeAttachment
+    Properties: 
+      Device: /dev/sde
+      InstanceId: !Ref rEC2ReportingInstance
+      VolumeId: !Ref rEC2ReportingDisk
+
+
+  rEC2ReportingDisk2:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain    
+    Properties: 
+      AvailabilityZone: us-east-1a
+      Encrypted: true
+      KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+      Size: !Ref pSizeDisk2
+      VolumeType: !Ref pTypeDisk
+      Tags: 
+        # - Key: Name
+        #   Value: !Join ["-", [!Ref 'AWS::StackName']]       
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no" 
+        - Key: "example:bkmensual"
+          Value: "ebs"
+        - Key: "example:bkdiario"
+          Value: "ebs"                       
+
+  rAttachmentReportingDisk2:      
+    Type: AWS::EC2::VolumeAttachment
+    Properties: 
+      Device: /dev/sdf
+      InstanceId: !Ref rEC2ReportingInstance
+      VolumeId: !Ref rEC2ReportingDisk2
+
+
+  rEC2ReportingDisk3:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain    
+    Properties: 
+      AvailabilityZone: us-east-1a
+      Encrypted: true
+      KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+      Size: !Ref pSizeDisk3
+      VolumeType: !Ref pTypeDisk
+      Tags: 
+        # - Key: Name
+        #   Value: !Join ["-", [!Ref 'AWS::StackName']]       
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no" 
+        - Key: "example:bkmensual"
+          Value: "ebs"
+        - Key: "example:bkdiario"
+          Value: "ebs"          
+
+  rAttachmentReportingDisk3:      
+    Type: AWS::EC2::VolumeAttachment
+    Properties: 
+      Device: /dev/sdg
+      InstanceId: !Ref rEC2ReportingInstance
+      VolumeId: !Ref rEC2ReportingDisk3
+
+  rEC2ReportingDisk4:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain    
+    Properties: 
+      AvailabilityZone: us-east-1a
+      Encrypted: true
+      KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+      Size: !Ref pSizeDisk4
+      VolumeType: !Ref pTypeDisk
+      Tags: 
+        # - Key: Name
+        #   Value: !Join ["-", [!Ref 'AWS::StackName']]       
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no" 
+        - Key: "example:bkmensual"
+          Value: "ebs"
+        - Key: "example:bkdiario"
+          Value: "ebs"                      
+
+
+  rAttachmentReportingDisk4:      
+    Type: AWS::EC2::VolumeAttachment
+    Properties: 
+      Device: /dev/sdh
+      InstanceId: !Ref rEC2ReportingInstance
+      VolumeId: !Ref rEC2ReportingDisk4  
+
+# ###### end disks configuration###########
+
+#####################role#############
+
+  rEC2ReportingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ["-", [!Ref 'AWS::StackName' , "rol-ec2-reporting"]]
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+      - PolicyName: ec2tags
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - 'ec2:Describe*'
+            - ec2:CreateTags
+            Resource: !Join ['', ['arn:', !Ref 'AWS::Partition', ':ec2:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':instance/*']]
+            Effect: Allow
+      - PolicyName: GetMetrics-CW
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - cloudwatch:PutMetricAlarm
+            - cloudwatch:TagResource
+            - cloudwatch:UntagResource
+            - cloudwatch:DescribeAlarms
+            - cloudwatch:DescribeAlarmHistory
+            - cloudwatch:ListDashboards
+            - cloudwatch:PutDashboard
+            - cloudwatch:PutMetricData
+            - cloudwatch:PutMetricStream
+            - cloudwatch:DeleteAlarms
+            Resource: !Join ['', ['arn:', !Ref 'AWS::Partition', ':ec2:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':instance/*']]
+            Effect: Allow
+      - PolicyName: createSSMAssociationEC2
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - ssm:CreateAssociation
+            Resource: arn:aws:ec2:*:*:*
+            Effect: Allow
+      - PolicyName: createSSMAssociation
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - ssm:CreateAssociationDocument
+            Resource: arn:aws:ssm:*:*:*
+            Effect: Allow
+      - PolicyName: cwlogs
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+            Resource: arn:aws:logs:*:*:*
+            Effect: Allow 
+              
+      - PolicyName: kmssessionlogging
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - 'kms:GenerateDataKey'
+            - 'kms:Decrypt'
+            Resource: arn:aws:kms:*:*:*
+            Effect: Allow    
+
+
+##Profile##
+
+  rEC2ReportingProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - Ref: rEC2ReportingRole
+
+###Policys###              
+
+  rS3Policy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - 's3:Get*'
+              - 's3:Put*'
+              - 's3:List*'
+            Resource:
+              - Fn::Sub: arn:aws:s3:::${pImportBase}*/*
+              - Fn::Sub: arn:aws:s3:::${pImportBase}*
+
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-install-bd"]]
+      Roles:
+        - !Ref rEC2ReportingRole 
+
+  rCustomKMSPolicy:
+    Type: 'AWS::IAM::Policy'
+    Condition: enableCustomKMS
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: 
+              - !Ref pCustomKMS
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-kms-shared-policy"]]
+      Roles:
+        - !Ref rEC2ReportingRole
+
+  rKMSPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: 
+              - !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-kms-policy"]]
+      Roles:
+        - !Ref rEC2ReportingRole        
+
+
+  rSecretCERTPolicy:
+    Type: 'AWS::IAM::Policy'
+    DependsOn:
+    - SecretsManagerResourcePolicyCertificateEC201
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action: 'secretsmanager:GetSecretValue'
+            Resource:
+              - !Ref pSecretCert
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-secret-cert-policy"]]
+      Roles:
+        - !Ref rEC2ReportingRole   
+
+
+  rEC2IdParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Instance ID
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "InstanceID"]]
+        Value: !Ref rEC2ReportingInstance            
+
+Outputs:
+  rSecretARN:
+    Value: !GetAtt InternalCertificateEC201.SecretArn
+  rSecretCER:
+    Value: !GetAtt InternalCertificateEC201.Cer                        
+
+
+
+
+

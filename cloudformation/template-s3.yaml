@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This template deploy all required S3 buckets for this app, files, certificates and load balancer logs
+
+Parameters:
+  
+  pAppBucketName:
+    Description: S3 bucket name which contain app and configuration files.
+    Type: String
+
+  # pALBLogsBucketName:
+  #   Type: String
+  #   Description: S3 bucket name which contain ALB logs.
+
+  pS3RestoreBucket:
+    Description:  Bucket name to backup restore RDS
+    Type: String  
+    
+  pAccessControl:
+    Description: Specify the access control list.
+    Type: String   
+    
+
+  pImportBase:
+    Description: Cadena de proyecto para Parameter storage
+    Type: String
+
+  pEnvironment:
+    Description: Environment
+    Type: String
+
+  pSftpRol: 
+    Description: Rol SFTP transfer
+    Type: String   
+
+  pPsKmsArn:
+    Description: ARN KMS value in the Parameter Store
+    Type: String        
+
+Conditions:
+
+  s3Exist:
+    !Not [!Equals [!Ref pAccessControl,"false"]]
+
+  enableS3Restore:
+     !Not [!Or [!Equals [!Ref pS3RestoreBucket, ""], !Equals [!Ref pS3RestoreBucket, "none"] ] ]
+
+Resources:
+
+
+  rS3Recursos: 
+    Condition: s3Exist  
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled    
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketName:
+        !Ref pAppBucketName
+      Tags: 
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no"   
+  
+
+  rS3BackupRestoreBucket:
+    Condition: enableS3Restore
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketName: !Ref pS3RestoreBucket
+      Tags: 
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no"   
+
+  rIAMManagedPolicyforS3BackupRestore:
+    Condition: enableS3Restore
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      # PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      ManagedPolicyName: !Join ["", [!Ref 'AWS::StackName' , "-iam-managed-policy"]]
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:ListBucket'
+              - 's3:GetBucketLocation'
+            Resource:
+                Fn::Sub: arn:aws:s3:::${pS3RestoreBucket}
+          - Effect: Allow
+            Action:
+              - 's3:GetObjectMetaData'
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:ListMultipartUploadParts'
+              - 's3:AbortMultipartUpload'
+            Resource:
+                !Join ["", ["arn:aws:s3:::", !Ref pS3RestoreBucket, "/*"]]
+          - Effect: Deny
+            Resource:
+              - !Join ['', [!GetAtt rS3BackupRestoreBucket.Arn]]
+              - !Join ['', [!GetAtt rS3BackupRestoreBucket.Arn, '/*']]
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+            # Principal: "*"
+            Action: s3:*
+
+  rS3BackupRestoreBucketParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Id s3 ec2 Services Application
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "ec2-reporting"]]
+        Value:
+            Ref: rS3BackupRestoreBucket

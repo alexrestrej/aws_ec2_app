@@ -1,0 +1,171 @@
+trigger:
+  branches:
+    include:
+      - trunk
+
+# Configure the AWS_* variables as pipeline secrets and populate config/params-*.json.
+variables:
+  appCode: YOUR_APP_CODE
+  projectName: YOUR_PROJECT_NAME
+
+stages:
+  - stage: deploy_dev
+    displayName: Deploy dev
+    jobs:
+      - job: deploy
+        displayName: Deploy CloudFormation stacks
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              set -euo pipefail
+
+              for resource in kms s3 sg sm reporting ec2; do
+                template="cloudformation/template-${resource}.yaml"
+                parameter_file="config/params-${resource}.json"
+                stack_name="$(appCode)-$(projectName)-dev-${resource}"
+
+                mapfile -t parameter_overrides < <(python3 - "$parameter_file" <<'PY'
+              import json
+              import sys
+
+              with open(sys.argv[1], encoding="utf-8") as parameter_file:
+                  parameters = json.load(parameter_file)
+              for key, value in {
+                  parameter["ParameterKey"]: parameter["ParameterValue"]
+                  for parameter in parameters
+                  if parameter
+              }.items():
+                  print(
+                      "ParameterKey={},ParameterValue={}".format(
+                          key, value
+                      )
+                  )
+              PY
+                )
+
+                deploy_args=(
+                  --template-file "$template"
+                  --stack-name "$stack_name"
+                  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+                  --no-fail-on-empty-changeset
+                )
+                if ((${#parameter_overrides[@]})); then
+                  deploy_args+=(--parameter-overrides "${parameter_overrides[@]}")
+                fi
+                aws cloudformation deploy "${deploy_args[@]}"
+              done
+            displayName: Deploy dev stacks
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID_DEV)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY_DEV)
+              AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN_DEV)
+              AWS_DEFAULT_REGION: $(AWS_REGION_DEV)
+
+  - stage: deploy_qa
+    displayName: Deploy qa
+    dependsOn: deploy_dev
+    jobs:
+      - job: deploy
+        displayName: Deploy CloudFormation stacks
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              set -euo pipefail
+
+              for resource in kms s3 sg sm reporting ec2; do
+                template="cloudformation/template-${resource}.yaml"
+                parameter_file="config/params-${resource}.json"
+                stack_name="$(appCode)-$(projectName)-qa-${resource}"
+
+                mapfile -t parameter_overrides < <(python3 - "$parameter_file" <<'PY'
+              import json
+              import sys
+
+              with open(sys.argv[1], encoding="utf-8") as parameter_file:
+                  parameters = json.load(parameter_file)
+              for key, value in {
+                  parameter["ParameterKey"]: parameter["ParameterValue"]
+                  for parameter in parameters
+                  if parameter
+              }.items():
+                  print(
+                      "ParameterKey={},ParameterValue={}".format(
+                          key, value
+                      )
+                  )
+              PY
+                )
+
+                deploy_args=(
+                  --template-file "$template"
+                  --stack-name "$stack_name"
+                  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+                  --no-fail-on-empty-changeset
+                )
+                if ((${#parameter_overrides[@]})); then
+                  deploy_args+=(--parameter-overrides "${parameter_overrides[@]}")
+                fi
+                aws cloudformation deploy "${deploy_args[@]}"
+              done
+            displayName: Deploy qa stacks
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID_QA)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY_QA)
+              AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN_QA)
+              AWS_DEFAULT_REGION: $(AWS_REGION_QA)
+
+  - stage: deploy_prod
+    displayName: Deploy prod
+    dependsOn: deploy_qa
+    jobs:
+      - job: deploy
+        displayName: Deploy CloudFormation stacks
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - bash: |
+              set -euo pipefail
+
+              for resource in kms s3 sg sm reporting ec2; do
+                template="cloudformation/template-${resource}.yaml"
+                parameter_file="config/params-${resource}.json"
+                stack_name="$(appCode)-$(projectName)-prod-${resource}"
+
+                mapfile -t parameter_overrides < <(python3 - "$parameter_file" <<'PY'
+              import json
+              import sys
+
+              with open(sys.argv[1], encoding="utf-8") as parameter_file:
+                  parameters = json.load(parameter_file)
+              for key, value in {
+                  parameter["ParameterKey"]: parameter["ParameterValue"]
+                  for parameter in parameters
+                  if parameter
+              }.items():
+                  print(
+                      "ParameterKey={},ParameterValue={}".format(
+                          key, value
+                      )
+                  )
+              PY
+                )
+
+                deploy_args=(
+                  --template-file "$template"
+                  --stack-name "$stack_name"
+                  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+                  --no-fail-on-empty-changeset
+                )
+                if ((${#parameter_overrides[@]})); then
+                  deploy_args+=(--parameter-overrides "${parameter_overrides[@]}")
+                fi
+                aws cloudformation deploy "${deploy_args[@]}"
+              done
+            displayName: Deploy prod stacks
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID_PROD)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY_PROD)
+              AWS_SESSION_TOKEN: $(AWS_SESSION_TOKEN_PROD)
+              AWS_DEFAULT_REGION: $(AWS_REGION_PROD)

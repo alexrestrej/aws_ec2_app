@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This Cloud Formation template create a KMS Key and attach the related roles to manage it
+
+
+Resources:
+
+  rKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Ref 'AWS::StackName'
+      EnableKeyRotation: true
+      PendingWindowInDays: '30'
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-policy
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Join ["", ["arn:aws:iam::", !Ref 'AWS::AccountId',":root"]]
+            Action:
+              - "kms:*"
+            Resource: '*'
+            Condition:
+              Bool:
+                aws:SecureTransport: True      
+                      
+          - Sid: Allow service-linked role use of the CMK 
+            Effect: Allow
+            Principal:
+              AWS: !Join ["", ["arn:aws:iam::", !Ref 'AWS::AccountId',":role","/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]]
+            Action:
+              - "kms:Encrypt"
+              - "kms:Decrypt"
+              - "kms:ReEncrypt*"
+              - "kms:GenerateDataKey*"
+              - "kms:DescribeKey"                           
+            Resource: '*'
+            Condition: 
+              StringEquals:
+                kms:ViaService:
+                - ec2.us-east-1.amazonaws.com
+                - secretsmanager.us-east-1.amazonaws.com
+                - ssm.us-east-1.amazonaws.com
+                - dms.us-east-1.amazonaws.com
+              Bool:
+                aws:SecureTransport: True    
+
+          - Sid: Allow attachment of persistent resources for AutoScalin 
+            Effect: Allow
+            Principal:
+              AWS: !Join ["", ["arn:aws:iam::", !Ref 'AWS::AccountId',":role","/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]]
+            Action:
+              - "kms:CreateGrant"
+            Resource: '*'
+            Condition: 
+              StringEquals:
+                kms:ViaService:
+                - ec2.us-east-1.amazonaws.com
+              Bool:
+                kms:GrantIsForAWSResource: true
+                aws:SecureTransport: True     
+
+          - Sid: Allow_Publish_Alarms
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action:
+              - 'kms:GenerateDataKey*'
+              - 'kms:Decrypt'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'kms:ViaService': sns.us-east-1.amazonaws.com 
+
+          - Sid: Allow the Macie service-linked role to use the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/macie.amazonaws.com/AWSServiceRoleForAmazonMacie'
+            Action:
+            - kms:Decrypt
+            Resource: '*'
+            
+  rKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Join ["", ["alias/", !Ref 'AWS::StackName']]
+      TargetKeyId: !Ref rKmsKey
+
+  rKmsKeyParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties: 
+        Description: kmsKey
+        Type: String
+        Name: !Ref 'AWS::StackName'
+        Value:
+            Ref: rKmsKey
+
+  rKmsARNParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties: 
+        Description: kmsKey
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "arn"]]
+        Value: 
+            !GetAtt rKmsKey.Arn
+
+Outputs:
+  rKmsKey:
+    Description: kmsKey
+    Value:
+       Ref: rKmsKey
+  

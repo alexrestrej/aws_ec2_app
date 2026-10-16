@@ -1,0 +1,781 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Services EC2'
+
+############################## Parameters ####################################################  
+Parameters:
+  pImageEC2:
+    Description: EC2 Instance AMI
+    Type: String
+   
+  pSubnet1:
+    Description: subnet 1 
+    Type: String
+
+  pSubnet2:
+    Description: subnet 2
+    Type: String    
+    
+  pEnvironment:
+    Description: Environment
+    Type: String
+
+  pInstanceType:
+    Description: Win2016 EC2 instance type
+    Type: String    
+    
+  pServername:
+    Description: EC2 server name.
+    Type: String 
+    
+  pIPPrimary:
+    Description: Instance Primary IP
+    Type: String   
+    
+  pPsgEc2:
+    Description: Parameter store security group DB   
+    Type: String
+    
+  pSecretCert:
+    Description: ARN Secret cer
+    Type: String
+
+  pSecretCert2:
+    Description: ARN of the second application certificate secret
+    Type: String
+
+  pPSKMS:
+    Description: KMS value in the Parameter Store
+    Type: String    
+
+  pPsKmsArn:
+    Description: ARN KMS value in the Parameter Store
+    Type: String
+    
+  pCustomKMS:
+    Description: Custom KMS for shared services
+    Type: String
+    
+  pImportBase:
+    Description: Name base for the resources of this stack
+    Type: String
+
+  pImportBaseShared:
+    Description: Name base for shared resources
+    Type: String    
+    
+  pBucketName:
+    Type: String
+    Description: The S3 bucket name that contains the resources
+    
+  pTypeDisk:
+    Type: String
+    Description: app disk type 
+
+  pInstanceSize:
+    Type: String
+    Description: EC2 size type  
+    
+## Parametros Certificados
+  pCerCommonName: 
+    Description: Common Name for Certificate 01.
+    Type: String
+    
+  pCerSans:
+    Description: SANS for Certificate 01.
+    Type: String
+
+  pCerCommonName2:
+    Description: Common Name for Certificate 02.
+    Type: String
+      
+  pCerSans2:
+    Description: SANS for Certificate 02.
+    Type: String
+    
+## Parametros PKI - Certificados Digitales
+  pCerPkiArn: 
+    Description: The ARN of the SNS topic used to request a PKI Certificate. 
+    Type: String   
+
+  pVpc:
+    Description: VPC
+    Type: String       
+
+## Parametros Deployment Group
+  pDeploymentgroupname:
+    Type: String
+    Description: Deployment Group for AZ Agent.
+
+  pDeploymentgroupPath:
+    Type: String
+    Description: Path for AZ Agent.
+
+  pDeploymentGroupRoleArn:
+    Type: String
+    Description: ARN of the deployment group role.
+
+  pS3LogsALB:
+    Type: String
+    Description: The S3 bucket name that contains ALB logs. 
+
+####################Condition###################   
+Conditions:
+  cAditionalEc2dev:
+    Fn::Equals: [Ref: pEnvironment, "dev"]
+
+  enableCustomKMS:
+    !Not [!Equals [!Ref pCustomKMS, ""] ]    
+
+  CreateSecretDatabasePolicy:
+    !And [!Not [!Equals [!Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBase, "sm-db-Database2"]], ":1","}}"]], ""]], !Not [!Equals [!Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBase, "sm-db-Database3"]], ":1","}}"]], ""]], !Not [!Equals [!Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBaseShared]], ":1","}}"]], ""]], !Not [!Equals [!Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBase, "sm-db-Database1"]], ":1","}}"]], ""]]]
+
+################ certificados ############################
+Resources:  
+  KMSKeyCertificate01:
+    Type: AWS::KMS::Key
+    Properties:
+      Enabled: True
+      EnableKeyRotation: True
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Join ['', ['arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':root']]
+          Action: kms:*
+          Resource: "*"
+        - Effect: Allow
+          Principal:
+            AWS:
+            - !Join ['', ['arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':role/pki']]
+          Action:
+          - kms:Decrypt
+          - kms:GenerateDataKey
+          Resource: "*"
+          Condition:
+            StringEquals:
+              kms:ViaService: !Join ['', ['secretsmanager.', !Ref 'AWS::Region', '.amazonaws.com']]
+        - Effect: Allow
+          Principal:
+            AWS:
+            - !GetAtt rEC2InstanceRole.Arn
+          Action:
+          - kms:Decrypt
+          Resource: "*"
+          Condition:
+            StringEquals:
+              kms:ViaService: !Join ['', ['secretsmanager.', !Ref 'AWS::Region', '.amazonaws.com']]
+
+#   ## Certificado Digital 01 - SecretsManager
+
+  SecretCertificateEC201:
+    Type: AWS::SecretsManager::Secret
+    Properties: 
+      Description: EC2 app secret cert
+      KmsKeyId: !Ref KMSKeyCertificate01
+      SecretString: ' '
+      Name:
+        Fn::Join: ["-", [ Ref: "AWS::StackName" , "SecretCertEC2"]]      
+
+  SecretsManagerResourcePolicyCertificateEC201:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties: 
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Join ['', ['arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':role/pki']]
+          Action: secretsmanager:PutSecretValue
+          Resource: !Ref SecretCertificateEC201
+        - Effect: Allow
+          Principal:
+            AWS: !GetAtt rEC2InstanceRole.Arn
+          Action: secretsmanager:GetSecretValue
+          Resource: !Ref SecretCertificateEC201
+          Condition:
+            StringEquals:
+              aws:SourceVpce: !Ref pVpc
+            IpAddress:
+              aws:VpcSourceIp: [!Ref pSubnet1, !Ref pSubnet2]
+        - Effect: Deny
+          Principal:
+            AWS: "*"
+          Action: secretsmanager:GetSecretValue
+          Resource: "*"
+          Condition:
+            StringNotEquals:
+              aws:PrincipalArn: !GetAtt rEC2InstanceRole.Arn              
+      SecretId: !Ref SecretCertificateEC201
+
+# ## Certificado Digital 01 - InternalDigitalCertificate
+
+  InternalCertificateEC201:
+    DependsOn:
+    - SecretsManagerResourcePolicyCertificateEC201
+    Type: Custom::InternalDigitalCertificate
+    Properties: 
+      ServiceToken: !Ref pCerPkiArn
+      common_name: !Ref pCerCommonName
+      subject_alternative_names: !Ref pCerSans
+      aws_service: EC2
+      key_type: RSA2048
+      secret_arn: !Ref SecretCertificateEC201
+## finaliza configuracion certificados
+
+#   ## Digital Certificate 02 - Secrets Manager
+
+  SecretCertificateEC202:
+    Type: AWS::SecretsManager::Secret
+    Properties: 
+      Description: EC2 app secret cert
+      KmsKeyId: !Ref KMSKeyCertificate01
+      SecretString: ' '
+      Name:
+        Fn::Join: ["-", [ Ref: "AWS::StackName" , "SecretCertEC22"]]      
+
+  SecretsManagerResourcePolicyCertificateEC202:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties: 
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Join ['', ['arn:', !Ref 'AWS::Partition', ':iam::', !Ref 'AWS::AccountId', ':role/pki']]
+          Action: secretsmanager:PutSecretValue
+          Resource: !Ref SecretCertificateEC202
+        - Effect: Allow
+          Principal:
+            AWS: !GetAtt rEC2InstanceRole.Arn
+          Action: secretsmanager:GetSecretValue
+          Resource: !Ref SecretCertificateEC202
+          Condition:
+            StringEquals:
+              aws:SourceVpce: !Ref pVpc
+            IpAddress:
+              aws:VpcSourceIp: [!Ref pSubnet1, !Ref pSubnet2]
+        - Effect: Deny
+          Principal:
+            AWS: "*"
+          Action: secretsmanager:GetSecretValue
+          Resource: "*"
+          Condition:
+            StringNotEquals:
+              aws:PrincipalArn: !GetAtt rEC2InstanceRole.Arn              
+      SecretId: !Ref SecretCertificateEC202
+
+# ## Certificado Digital 02 - InternalDigitalCertificate
+  InternalCertificateEC202:
+    DependsOn:
+    - SecretsManagerResourcePolicyCertificateEC202
+    Type: Custom::InternalDigitalCertificate
+    Properties: 
+      ServiceToken: !Ref pCerPkiArn
+      common_name: !Ref pCerCommonName2
+      subject_alternative_names: !Ref pCerSans2
+      aws_service: EC2
+      key_type: RSA2048
+      secret_arn: !Ref SecretCertificateEC202
+
+## End certificate configuration
+
+######################### Resources intance EC2#############################   
+###### EC2 ENI ###############
+  rENIEc2App:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Description: EC2 ENI configuration 
+      PrivateIpAddresses: 
+        - Primary: true
+          PrivateIpAddress: !Ref pIPPrimary 
+      GroupSet: 
+        - !Ref pPsgEc2
+      SubnetId: !Ref pSubnet1
+
+######## END ENI CONFIGURATION  #########      
+
+  rEC2AppInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Retain   
+    Properties:
+      DisableApiTermination: true
+      Monitoring: True
+      #Todo parametor que se toque en la seccion NetworkInterfaces, recreara la instancia ec2
+      NetworkInterfaces: 
+      - NetworkInterfaceId:
+          Ref: rENIEc2App
+        DeviceIndex: "0" 
+      ##############################################################################
+      InstanceType: !Ref pInstanceType
+      ImageId: !Ref pImageEC2
+      IamInstanceProfile: !Ref rInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            DeleteOnTermination: 'false'
+            VolumeSize: !Ref pInstanceSize 
+            VolumeType: !Ref pTypeDisk          
+            Encrypted: 'true' 
+            KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+        - DeviceName: /dev/sdb
+          Ebs:
+            DeleteOnTermination: 'false'
+            VolumeSize: 100
+            VolumeType: !Ref pTypeDisk
+            Encrypted: 'true' 
+            KmsKeyId: !Join ["", ["{{resolve:ssm:", !Ref pPsKmsArn, "}}"]]
+
+
+      UserData:
+       Fn::Base64:
+         Fn::Sub:
+          - |
+            <powershell>
+              Start-Transcript -Path "C:\UserData.log" -Append
+              
+              echo "Ejecutando linea base..."
+              Get-Service -Name AmazonSSMAgent | Restart-Service  -verbose
+              & "C:/Windows/build-scripts/bootstrap.ps1"
+              aws configure set default.s3.signature_version s3v4
+              aws configure set default.s3.max_concurrent_requests 20 
+
+              echo "Installing features"
+              Install-WindowsFeature -name Web-Server -IncludeManagementTools
+              Install-WindowsFeature -Name Web-WebServer
+              Install-WindowsFeature -name Web-Windows-Auth
+              Install-WindowsFeature -name NET-HTTP-Activation
+              Install-WindowsFeature -name NET-Non-HTTP-Activ
+              Install-WindowsFeature -name net-wcf-http-activation45
+
+              echo "Configuring time zone"
+              Set-TimeZone -Name "SA Pacific Standard Time"
+
+              & "C:\Program Files\Amazon\AmazonCloudWatchAgent\amazon-cloudwatch-agent-ctl.ps1" -a append-config -m ec2 -c file:"C:/temp/CW_Logs_APPLICATION.json" -s
+
+              echo "Downloading application and feature files from S3"
+              aws s3 cp s3://${_AppBucketName}/App/  d:\app --recursive
+              aws s3 cp s3://${_AppBucketName}/Features/  C:\temp --recursive              
+
+              Start-Sleep -Seconds 10
+       
+              function WaitForMSIMutex {
+                while($true) {
+                  try {
+                      $mutex = [System.Threading.Mutex]::OpenExisting('Global\_MSIExecute')
+                      $mutex.Dispose()
+                      Write-Host "Waiting 5 secs..... Mutex Blocked"
+                      Start-Sleep 5
+                      }
+                  catch [System.Threading.WaitHandleCannotBeOpenedException]{
+                      Write-Host "Ready To Install :)"
+                      break
+                  }
+                }
+              }              
+  
+
+              echo "Importar certificados"
+              New-Item -Path "D:\" -Name "Certificados" -ItemType "directory"
+              $Getsecret = Get-SECSecretValue -SecretId ${SecretCert}
+              $Getsecret2 = Get-SECSecretValue -SecretId ${SecretCert2}
+              $Secretjson = $Getsecret.SecretString | ConvertFrom-Json
+              $Secretjson2 = $Getsecret2.SecretString | ConvertFrom-Json
+              $Secretjson.cer > D:\Certificados\cert.cer
+              $Secretjson2.cer > D:\Certificados\aplicacionesautomaticas.cer
+              $Secretjson.chain > D:\Certificados\chain.cer
+              $Secretjson2.chain > D:\Certificados\aplicacionesautomaticas-chain.cer
+              $Secretjson.key > D:\Certificados\cert.key
+              $Secretjson2.key > D:\Certificados\aplicacionesautomaticas.key
+              $pass = $Secretjson.passphrase
+              $pass2 = $Secretjson2.passphrase 
+              certutil -p *,$pass -mergepfx D:\Certificados\cert.cer D:\Certificados\cert.pfx
+              certutil -p *,$pass2 -mergepfx D:\Certificados\aplicacionesautomaticas.cer D:\Certificados\aplicacionesautomaticas.pfx                        
+              
+              echo "importar un certificado al almacen de certificados de ec2"
+              Import-Certificate -FilePath "D:\Certificados\cert.cer" -CertStoreLocation cert:\LocalMachine\my
+              Import-Certificate -FilePath "D:\Certificados\chain.cer" -CertStoreLocation cert:\LocalMachine\root
+              Import-Certificate -FilePath "D:\Certificados\chain.cer" -CertStoreLocation cert:\LocalMachine\CA
+              Import-Certificate -FilePath "D:\Certificados\aplicacionesautomaticas.cer" -CertStoreLocation cert:\LocalMachine\my
+              Import-Certificate -FilePath "D:\Certificados\aplicacionesautomaticas-chain.cer" -CertStoreLocation cert:\LocalMachine\root
+              Import-Certificate -FilePath "D:\Certificados\aplicacionesautomaticas-chain.cer" -CertStoreLocation cert:\LocalMachine\CA   
+ 
+              echo "importar llave privada al almacen de certificados"
+              $secretPFX=aws secretsmanager --region us-east-1 get-secret-value --secret-id ${SecretCert} --query SecretString --version-stage AWSCURRENT --output text
+              $passwordsec = ConvertFrom-Json -InputObject $secretPFX | select -expand passphrase
+              $stringSecretCert = "$passwordsec"
+              $password = ConvertTo-SecureString -String $stringSecretCert -Force -AsPlainText
+              $Rimport = Import-PfxCertificate -FilePath "D:\Certificados\cert.pfx" -CertStoreLocation Cert:\Localmachine\My -Password $password
+              $Rimport = Import-PfxCertificate -FilePath "D:\Certificados\cert.pfx" -CertStoreLocation Cert:\Localmachine\root -Password $password
+              echo "import result: $Rimport"
+
+              $secretPFX2=aws secretsmanager --region us-east-1 get-secret-value --secret-id ${SecretCert2} --query SecretString --version-stage AWSCURRENT --output text
+              $passwordsec2 = ConvertFrom-Json -InputObject $secretPFX2 | select -expand passphrase
+              $stringSecretCert2 = "$passwordsec2"
+              $password2 = ConvertTo-SecureString -String $stringSecretCert2 -Force -AsPlainText
+              $Rimport = Import-PfxCertificate -FilePath "D:\Certificados\aplicacionesautomaticas.pfx" -CertStoreLocation Cert:\Localmachine\My -Password $password2
+              $Rimport = Import-PfxCertificate -FilePath "D:\Certificados\aplicacionesautomaticas.pfx" -CertStoreLocation Cert:\Localmachine\root -Password $password2
+              echo "import result: $Rimport"
+
+                echo "Installing application"
+                function WaitForFileLock {
+                  param ([parameter(Mandatory=$true)][string]$Path)
+                  $oFile = New-Object System.IO.FileInfo $Path
+                  if ((Test-Path -Path $Path) -eq $false) {
+                    Write-Host "File $Path doesn't exist"
+                    break
+                  }
+                  while($true){
+                    try {
+                    $oStream = $oFile.Open([System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+                    if ($oStream) {
+                      $oStream.Close()
+                    }
+                    break
+                    }
+                    catch {
+                      Write-Host "File $Path is open... Waiting 5 sec before retry.... :("
+                      Start-Sleep 5
+                    }
+                  }
+                }
+                function WaitUntilFileExist {
+                  param ([parameter(Mandatory=$true)][string]$Path)
+                  $oFile = New-Object System.IO.FileInfo $Path
+                  while($true){
+                  if ((Test-Path -Path $Path) -eq $false) {
+                    Write-Host "File $Path doesn't exist"
+                  }
+                  else{
+                    if(((Get-Item $Path).length) -eq 0){
+                      Write-Host "File $Path exist but 0 length"
+                    }
+                  }
+                    try {
+                    $oStream = $oFile.Open([System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+                    if ($oStream) {
+                      $oStream.Close()
+                    }
+                    break
+                    }
+                    catch {
+                      Write-Host "Waiting 5 sec before recheck.... :("
+                      Start-Sleep 5
+                    }
+                  }
+                }
+                WaitForMSIMutex
+
+                $file= 'C:\temp\YOUR_APPLICATION_INSTALLER.msi'
+                $DataStamp = get-date -Format yyyyMMddTHHmmss
+                $logFile = '{0}-{1}.log' -f $file,$DataStamp
+                $MSIArguments = @(
+                "/i"
+                ('"{0}"' -f $file)
+                "/qn"
+                "ALLUSERS=1"
+                "/L*v"
+                $logFile
+                )
+                Start-Process "msiexec.exe" -ArgumentList $MSIArguments -Wait
+
+                echo "Configuring seeds and database profiles"
+                function GetRandomSeed {
+                      Write-Output ( -join ((0x30..0x39) + ( 0x41..0x5A) + ( 0x61..0x7A) | Get-Random -Count 4  | % {[char]$_}) ).toUpper()
+                }
+                $BootstrapSecret = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId "${_secretDBDatabase1}").SecretString
+                Start-Process -NoNewWindow "C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\YOUR_APPLICATION.exe" -ArgumentList "1,$(GetRandomSeed),$(GetRandomSeed),0,$($BootstrapSecret.securitytype),$($BootstrapSecret.motordb),$($BootstrapSecret.username),$($BootstrapSecret.password),$($BootstrapSecret.profilename),$($BootstrapSecret.provider),$($BootstrapSecret.hostname),$($BootstrapSecret.bdname),$($BootstrapSecret.parametrosad)"
+                WaitUntilFileExist("C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\Configuracion\AccesoDatosConfig.xml")
+                WaitUntilFileExist("C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\Configuracion\semilla.key")
+
+                $DatabaseProfiles = "${_secretDBDatabase2}","${_secretDBShared}","${_secretDBDatabase3}"
+                foreach ($profile in $DatabaseProfiles){
+                  $SecretString = ConvertFrom-Json -InputObject (Get-SECSecretValue -SecretId $profile).SecretString
+                  Start-Process "C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\YOUR_APPLICATION.exe" -ArgumentList "1,$(GetRandomSeed),$(GetRandomSeed),1,$($SecretString.securitytype),$($SecretString.motordb),$($SecretString.username),$($SecretString.password),$($SecretString.profilename),$($SecretString.provider),$($SecretString.hostname),$($SecretString.bdname),$($SecretString.parametrosad)"
+                  Start-Sleep 5
+                  WaitForFileLock("C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\Configuracion\AccesoDatosConfig.xml")
+                  WaitForFileLock("C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\Configuracion\semilla.key")
+                  if ($SecretString.hostname -Match ";"){
+                          $newXmlNode = $SecretString.hostname -Replace ";", ","
+                          $xml = [xml](Get-Content "C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\Configuracion\AccesoDatosConfig.xml")
+                          $SearchCriteria = "descendant::Perfil[@Nombre='$($SecretString.profilename)']"
+                          $xmlnode = $xml.SelectSingleNode($SearchCriteria)
+                          Write-Host "Replacing $($xmlnode.Servidor) by $newXmlNode for $($xmlnode.Nombre)"
+                          $xmlnode.Servidor = $newXmlNode
+                          $xml.Save((Resolve-Path "C:\Program Files\YOUR_VENDOR\YOUR_APPLICATION\Configuracion\AccesoDatosConfig.xml"))
+                  }
+                }
+
+              echo "Instalacion Microsoft Access Database Engine"
+              Start-Process "C:\temp\AccessDatabaseEngine_X64.exe" '/quiet /norestart' -wait
+              Start-Sleep -Seconds 60
+              
+              echo "tags"
+              $AWS_AVAIL_ZONE=(curl http://169.254.169.254/latest/meta-data/placement/availability-zone -UseBasicParsing).Content
+              echo $AWS_AVAIL_ZONE
+              $AWS_REGION=$AWS_AVAIL_ZONE.Substring(0,$AWS_AVAIL_ZONE.length-1)
+              echo $AWS_REGION
+              $AWS_INSTANCE_ID=(curl http://169.254.169.254/latest/meta-data/instance-id -UseBasicParsing).Content
+              echo $AWS_INSTANCE_ID
+                $Tags = @( @{key="example:application-code";value="YOUR_APP_CODE"}, `
+                          @{key="example:business-service";value="YOUR_BUSINESS_SERVICE"}, `
+                          @{key="example:environment";value="${_Environment}"}, `
+                          @{key="example:pmo";value="YOUR_PMO_CODE"}, `
+                          @{key="example:cost-center";value="YOUR_COST_CENTER"}, `
+                          @{key="example:project-name";value="YOUR_PROJECT_NAME"}, `
+                          @{key="Name";value="YOUR_APP_CODE-YOUR_PROJECT_NAME"}, `
+                          @{key="example:info-finan-conta-legal";value=""}, `
+                          @{key="bia";value="no"}, `
+                          @{key="example:dominio-informacion";value="YOUR_BUSINESS_DOMAIN"}, `
+                          @{key="example:datos-personales";value="personal-data"}, `
+                          @{key="example:cumplimiento";value="no"}, `
+                          @{key="example:clasificacion-confidencialidad";value="confidencial"}, `
+                          @{key="example:clasificacion-integridad";value="impacto moderado"}, `
+                          @{key="example:clasificacion-disponibilidad";value="impacto tolerable"} )
+              echo $Tags
+              $volumes = (Get-EC2Instance -Region $AWS_REGION -InstanceId $AWS_INSTANCE_ID).Instances.BlockDeviceMappings.Ebs.VolumeId
+              foreach ($volume in $volumes)
+              {
+              New-EC2Tag -Resource $volume -Region $AWS_REGION -Tag $Tags
+              }
+
+              echo "Setting the standard server name"
+              $finalHostname = "${_ServerName}"
+              Rename-Computer -NewName $finalHostname -Verbose                         
+              Start-Sleep -Seconds 60
+
+              Restart-Computer
+            </powershell>
+          - 
+            _Environment: !Ref pEnvironment
+            SecretCert: !Ref pSecretCert
+            SecretCert2: !Ref pSecretCert2           
+            _ServerName: !Ref pServername
+            _AppBucketName: !Ref pBucketName
+            _secretDBShared: !Join ["-", [!Ref pImportBaseShared, "sm-bd-shared-database-sm"]]
+            _secretDBDatabase3: !Join ["-", [!Ref pImportBase, "sm-bd-Database3-sm"]]
+            _secretDBDatabase1: !Join ["-", [!Ref pImportBase, "sm-bd-Database1-sm"]]
+            _secretDBDatabase2: !Join ["-", [!Ref pImportBase, "sm-bd-Database2-sm"]]
+
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [!Ref 'AWS::StackName']]        
+        - Key: "example:clasificacion-confidencialidad"
+          Value: "confidencial"
+        - Key: "example:clasificacion-integridad"
+          Value: "impacto moderado"
+        - Key: "example:clasificacion-disponibilidad"
+          Value: "impacto tolerable"
+        - Key: "example:dominio-informacion"
+          Value: "YOUR_BUSINESS_DOMAIN"
+        - Key: "example:datos-personales"
+          Value: "personal-data"
+        - Key: "example:cumplimiento"
+          Value: "no"
+        - Key: "example:bkdiario"
+          Value: "ec2"
+        - Key: "example:bkmensual"
+          Value: "ec2"    
+
+  rInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: 
+      - !Ref rEC2InstanceRole
+
+  rEC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/YOUR_GOVERNANCE_BOUNDARY_POLICY
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      Policies:
+
+      - PolicyName: ec2tags
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - 'ec2:Describe*'
+            - ec2:CreateTags
+            Resource: !Join ['', ['arn:', !Ref 'AWS::Partition', ':ec2:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':instance/*']]
+            Effect: Allow
+
+      - PolicyName: createSSMAssociationEC2
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - ssm:CreateAssociation
+            Resource: arn:aws:ec2:*:*:*
+            Effect: Allow
+
+      - PolicyName: createSSMAssociation
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Action:
+            - ssm:CreateAssociationDocument
+            Resource: arn:aws:ssm:*:*:*
+            Effect: Allow
+      RoleName: !Join ["-", ["YOUR_ROLE_PREFIX",!Ref 'AWS::StackName', "rol-services"]]
+
+  rS3Policy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - 's3:Get*'
+              - 's3:Put*'
+              - 's3:List*'
+              - 's3:DeleteObject'              
+            Resource: 
+              - Fn::Sub: arn:aws:s3:::${pImportBase}*/*
+              - Fn::Sub: arn:aws:s3:::${pImportBase}*
+
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-s3-policy"]]
+      Roles:
+        - !Ref rEC2InstanceRole  
+
+  rCustomKMSPolicy:
+    Type: 'AWS::IAM::Policy'
+    Condition: enableCustomKMS
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: 
+              - !Ref pCustomKMS
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-kms-shared-policy"]]
+      Roles:
+        - !Ref rEC2InstanceRole
+
+  rKMSPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: 
+              - !Join ["", ["arn:aws:kms:",!Ref 'AWS::Region',":",!Ref 'AWS::AccountId',":key/{{resolve:ssm:", !Ref pPSKMS, "}}"]]
+
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-kms-policy"]]
+      Roles:
+        - !Ref rEC2InstanceRole          
+
+  rDeploymentGroupPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Resource:
+              - !Ref pDeploymentGroupRoleArn
+      PolicyName:
+        Fn::Join: ["-", [Ref: 'AWS::StackName' , "policy-DeploymentGroup"]]
+      Roles:
+        - Ref: rEC2InstanceRole
+
+  rSecretDatabasePolicy:
+    Type: 'AWS::IAM::Policy'
+    Condition: CreateSecretDatabasePolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action: 'secretsmanager:GetSecretValue'
+            Resource:
+              - !Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBase, "sm-db-Database1"]], "}}"]]
+              - !Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBaseShared]], "}}"]]
+              - !Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBase, "sm-db-Database2"]], "}}"]]
+              - !Join ["", ["{{resolve:ssm:", !Join ["-", [!Ref pImportBase, "sm-db-Database3"]], "}}"]]
+              - !Sub arn:aws:sts::${AWS::AccountId}:root 
+
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-secret-database-policy"]]
+      Roles:
+        - !Ref rEC2InstanceRole           
+  
+  rSecretCERTPolicy:
+    Type: 'AWS::IAM::Policy'
+    DependsOn:
+    - SecretsManagerResourcePolicyCertificateEC201
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action: 'secretsmanager:GetSecretValue'
+            Resource:
+              - !Ref pSecretCert
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-secret-cert-policy"]]
+      Roles:
+        - !Ref rEC2InstanceRole
+
+  rSecretCERTPolicy2:
+    Type: 'AWS::IAM::Policy'
+    DependsOn:
+    - SecretsManagerResourcePolicyCertificateEC202
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: VisualEditor0
+            Effect: Allow
+            Action: 'secretsmanager:GetSecretValue'
+            Resource:
+              - !Ref pSecretCert2
+      PolicyName: !Join ["", [!Ref 'AWS::StackName' , "-secret-cert-policy2"]]
+      Roles:
+        - !Ref rEC2InstanceRole 
+
+  rEC2IdParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Instance ID
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "InstanceID"]]
+        Value: !Ref rEC2AppInstance      
+
+Outputs:
+  rSecretARN:
+    Value: !GetAtt InternalCertificateEC201.SecretArn
+  rSecretCER:
+    Value: !GetAtt InternalCertificateEC201.Cer
+  rSecretARN2:
+    Value: !GetAtt InternalCertificateEC202.SecretArn
+  rSecretCER2:
+    Value: !GetAtt InternalCertificateEC202.Cer 

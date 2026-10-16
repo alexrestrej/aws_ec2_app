@@ -1,0 +1,299 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation security groups
+
+
+Parameters:
+
+  pCidrFileTransfer:
+    Description: CIDR range for file transfer access
+    Type: String
+
+  pCidrDatabaseTransfer:
+    Description: CIDR range for database transfer access
+    Type: String 
+
+  pCidrServiceIntegration:
+    Description: CIDR range for service integration access
+    Type: String 
+
+  pEnvironment:
+    Description: Environment
+    Type: String
+
+  pCidrApplicationService:
+    Description: CIDR range for application service access
+    Type: String
+
+  pScannerRangePrimary:
+    Description: Primary scanner CIDR range
+    Type: String
+
+  pScannerRangeSecondary:
+    Description: Secondary scanner CIDR range
+    Type: String
+
+  pAdminRangePrimary:
+    Description: Primary administrator CIDR range
+    Type: String
+
+  pAdminRangeSecondary:
+    Description: Secondary administrator CIDR range
+    Type: String
+
+  pAdminRangeContingency:
+    Description: Contingency administrator CIDR range
+    Type: String
+
+  pInternalNetworkRange:
+    Description: Internal network CIDR range
+    Type: String
+
+  pIntegrationRange:
+    Description: Integration network CIDR range
+    Type: String
+
+  pIntegrationQaRange:
+    Description: QA integration CIDR range
+    Type: String
+
+  pIntegrationDevRange:
+    Description: Development integration CIDR range
+    Type: String
+
+  pManagementRange:
+    Description: System management CIDR range
+    Type: String
+
+  pVpnAccessRange:
+    Description: VPN access CIDR range
+    Type: String
+
+  pIntegrationIngressQaRange:
+    Description: QA integration ingress CIDR range
+    Type: String
+
+  pIntegrationIngressSecondaryRange:
+    Description: Secondary QA integration ingress CIDR range
+    Type: String
+
+Conditions:
+
+  cEnviromentQA:
+    Fn::Equals: [ !Ref pEnvironment, "qa" ]       
+
+Resources:    
+
+  rSecurityGroupEC2Services:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access from Lan to EC2
+      GroupName: !Join ["", [!Ref 'AWS::StackName' , "-ec2-Services"]]
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          Description: Allow access to the EC2 APP from scanner
+          CidrIp: !Ref pScannerRangePrimary
+        - IpProtocol: -1
+          Description: Allow access to the EC2 APP from scanner
+          CidrIp: !Ref pScannerRangeSecondary
+        - IpProtocol: tcp
+          Description: Allow access to the EC2 APP from PrivilegedAccess1
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref pAdminRangePrimary
+        - IpProtocol: tcp
+          Description: Allow access to the EC2 APP from PrivilegedAccess2
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref pAdminRangeSecondary
+        - IpProtocol: tcp
+          Description: Allow access to the EC2 APP from PrivilegedAccessContingencia
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref pAdminRangeContingency
+        - IpProtocol: tcp
+          Description: Allow access from FileTransfer to EC2
+          FromPort: 20
+          ToPort: 21
+          CidrIp: !Ref pCidrFileTransfer
+        - IpProtocol: tcp 
+          Description: Allow access from database-transfer BD to EC2
+          FromPort: 40567
+          ToPort: 40567
+          CidrIp: !Ref pCidrDatabaseTransfer
+        - IpProtocol: tcp  
+          Description: Access from internal network
+          FromPort: 443
+          ToPort: 445
+          CidrIp: !Ref pInternalNetworkRange
+        - IpProtocol: tcp # review firewall rule #
+          Description: Allow access to the EC2 APP from Integracion        
+          FromPort: 443
+          ToPort: 444
+          CidrIp: !Ref pCidrServiceIntegration
+        - IpProtocol: tcp  
+          Description: Access from internal network
+          FromPort: 8443
+          ToPort: 8443
+          CidrIp: !Ref pInternalNetworkRange
+        - IpProtocol: tcp  
+          Description: Acceso ec2 Application Service
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref pCidrApplicationService
+        - IpProtocol: tcp  
+          Description: Acceso ec2 Application Service
+          FromPort: 82
+          ToPort: 82
+          CidrIp: !Ref pCidrApplicationService
+        - IpProtocol: -1
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref pInternalNetworkRange
+          Description: Allow access to the EC2 from the internal network
+        - IpProtocol: tcp  
+          Description:  Allow access to integration
+          FromPort: 8443
+          ToPort: 8443
+          CidrIp: !Ref pIntegrationRange
+        - IpProtocol: tcp  
+          Description:  Allow access to integration QA
+          FromPort: 85
+          ToPort: 85
+          CidrIp: !Ref pIntegrationQaRange
+        - IpProtocol: tcp  
+          Description:  Allow access to integration DEV
+          FromPort: 85
+          ToPort: 85
+          CidrIp: !Ref pIntegrationDevRange
+ 
+      Tags:
+        - Key: Name
+          Value:  !Join ["", [!Ref 'AWS::StackName' , "-ec2-Services"]]   
+
+
+  rInstanceReportingSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow conection to client
+      GroupName: !Join ["-", [!Ref 'AWS::StackName' , "ec2-reporting"]]
+      VpcId:
+        Fn::ImportValue: DefaultVPCId
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          Description: Allow access to the EC2 APP from scanner
+          CidrIp: !Ref pScannerRangePrimary
+        - IpProtocol: -1
+          Description: Allow access to the EC2 APP from scanner
+          CidrIp: !Ref pScannerRangeSecondary
+        - IpProtocol: tcp
+          Description: Allow access to the EC2 APP from PrivilegedAccess1
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref pAdminRangePrimary
+        - IpProtocol: tcp
+          Description: Allow access to the EC2 APP from PrivilegedAccess2
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref pAdminRangeSecondary
+        - IpProtocol: tcp
+          Description: Acceso SystemsManagement a la EC2
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref pManagementRange
+        - IpProtocol: tcp
+          Description: Acceso SystemsManagement a la EC2
+          FromPort: 10123
+          ToPort: 10123
+          CidrIp: !Ref pManagementRange
+        - IpProtocol: tcp
+          Description: Acceso SystemsManagement a la EC2
+          FromPort: 445
+          ToPort: 445
+          CidrIp: !Ref pManagementRange
+        - IpProtocol: tcp
+          Description: "VPN client access"
+          FromPort: 50100
+          ToPort: 50101
+          CidrIp: '{{resolve:ssm:YOUR_VPN_CIDR_PARAMETER:1}}'
+        - IpProtocol: tcp
+          Description: "Contingency VPN client access"
+          FromPort: 50100
+          ToPort: 50101
+          CidrIp: '{{resolve:ssm:YOUR_CONTINGENCY_VPN_CIDR_PARAMETER:1}}'
+        - IpProtocol: tcp  
+          Description: Access from application group to database
+          FromPort: 50100
+          ToPort: 50101
+          SourceSecurityGroupId: !Ref rSecurityGroupEC2Services
+        - IpProtocol: tcp  
+          Description: Access from internal network
+          FromPort: 50100
+          ToPort: 50101
+          CidrIp: !Ref pInternalNetworkRange
+        - IpProtocol: tcp  
+          Description: Access from internal network
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref pInternalNetworkRange
+             
+
+      Tags:
+        - Key: Name
+          Value:  !Join ["-", [!Ref 'AWS::StackName' , "ec2-reporting"]] 
+
+         
+
+  rIngressRDP2SecurityGroupReporting:
+    Type: AWS::EC2::SecurityGroupIngress
+    # Condition: cNotEnvDev
+    Properties:
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: !Ref pVpnAccessRange
+      Description: Access to reporting services from VPN
+      GroupId: !Ref rInstanceReportingSecurityGroup
+
+ #### sg Ingress available only in QA##      
+
+  rIngressIntegracionSecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: cEnviromentQA
+    Properties:
+      IpProtocol: tcp
+      FromPort: 441
+      ToPort: 441
+      CidrIp: !Ref pIntegrationIngressQaRange
+      Description: Allow access to Integracion ingressApis
+      GroupId: !Ref rSecurityGroupEC2Services
+
+  rIngressIntegracionSecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: cEnviromentQA
+    Properties:
+      IpProtocol: tcp
+      FromPort: 441
+      ToPort: 441
+      CidrIp: !Ref pIntegrationIngressSecondaryRange
+      Description: Allow access to Integracion ingressApis 
+      GroupId: !Ref rSecurityGroupEC2Services
+
+  rSecurityGroupEC2AppParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Id security group ec2 Services Application
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "ec2-services"]]
+        Value:
+            Ref: rSecurityGroupEC2Services  
+
+  rSecurityGroupEC2ReportingParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+        Description: Id security group ec2 Services Application
+        Type: String
+        Name: !Join ["-", [!Ref 'AWS::StackName', "ec2-reporting"]]
+        Value:
+            Ref: rInstanceReportingSecurityGroup    

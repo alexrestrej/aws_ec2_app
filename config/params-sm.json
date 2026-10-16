@@ -1,0 +1,134 @@
+[
+    {
+        "ParameterKey": "pPSKMS",
+        "ParameterValue": "#{ps-kms}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pUsernameDatabase1",
+        "ParameterValue": "#{db-Database1-username}#"
+    },
+    {
+        "ParameterKey": "pHostnameDatabase1",
+        "ParameterValue": "#{db-Database1-hostname}#"
+    },
+    {
+        "ParameterKey": "pPasswordDatabase1",
+        "ParameterValue": "#{db-Database1-password}#"
+    },
+    {
+        "ParameterKey": "pProfilenameDatabase1",
+        "ParameterValue": "#{db-Database1-profile}#"
+    },
+    {
+        "ParameterKey": "pProviderDatabase1",
+        "ParameterValue": "#{db-Database1-provider}#"
+    },
+    {
+        "ParameterKey": "pBdNameDatabase1",
+        "ParameterValue": "#{db-Database1-bdname}#"
+    },
+    {
+        "ParameterKey": "pParametrosAdDatabase1",
+        "ParameterValue": "#{db-Database1-parametrosad}#"
+    },
+    {
+        "ParameterKey": "pSecurityTypeDatabase1",
+        "ParameterValue": "#{db-Database1-securitytype}#"
+    },
+    {
+        "ParameterKey": "pMotorBDDatabase1",
+        "ParameterValue": "#{db-Database1-motorbd}#"
+    },
+    {
+        "ParameterKey": "pUsernameDatabase2",
+        "ParameterValue": "#{db-Database2-username}#"
+    },
+    {
+        "ParameterKey": "pHostnameDatabase2",
+        "ParameterValue": "#{db-Database2-hostname}#"
+    },
+    {
+        "ParameterKey": "pPasswordDatabase2",
+        "ParameterValue": "#{db-Database2-password}#"
+    },
+    {
+        "ParameterKey": "pProfilenameDatabase2",
+        "ParameterValue": "#{db-Database2-profile}#"
+    },
+    {
+        "ParameterKey": "pProviderDatabase2",
+        "ParameterValue": "#{db-Database2-provider}#"
+    },
+    {
+        "ParameterKey": "pBdNameDatabase2",
+        "ParameterValue": "#{db-Database2-bdname}#"
+    },
+    {
+        "ParameterKey": "pParametrosAdDatabase2",
+        "ParameterValue": "#{db-Database2-parametrosad}#"
+    },
+    {
+        "ParameterKey": "pSecurityTypeDatabase2",
+        "ParameterValue": "#{db-Database2-securitytype}#"
+    },
+    {
+        "ParameterKey": "pMotorDatabase2",
+        "ParameterValue": "#{db-Database2-motorbd}#"
+    },
+    {
+        "ParameterKey": "pUsernameDatabase3",
+        "ParameterValue": "#{db-Database3-username}#"
+    },
+    {
+        "ParameterKey": "pHostnameDatabase3",
+        "ParameterValue": "#{db-Database3-hostname}#"
+    },
+    {
+        "ParameterKey": "pPasswordDatabase3",
+        "ParameterValue": "#{db-Database3-password}#"
+    },
+    {
+        "ParameterKey": "pProfilenameDatabase3",
+        "ParameterValue": "#{db-Database3-profile}#"
+    },
+    {
+        "ParameterKey": "pProviderDatabase3",
+        "ParameterValue": "#{db-Database3-provider}#"
+    },
+    {
+        "ParameterKey": "pBdNameDatabase3",
+        "ParameterValue": "#{db-Database3-bdname}#"
+    },
+    {
+        "ParameterKey": "pParametrosAdDatabase3",
+        "ParameterValue": "#{db-Database3-parametrosad}#"
+    },
+    {
+        "ParameterKey": "pSecurityTypeDatabase3",
+        "ParameterValue": "#{db-Database3-securitytype}#"
+    },
+    {
+        "ParameterKey": "pMotorDatabase3",
+        "ParameterValue": "#{db-Database3-motorbd}#"
+    },
+    {
+        "ParameterKey": "pVpc",
+        "ParameterValue": "#{vpc}#"
+    },
+    {
+        "ParameterKey": "pArnrole",
+        "ParameterValue": "#{role-ec2-arn}#"
+    },
+    {
+        "ParameterKey": "pASGSubnet1",
+        "ParameterValue": "#{subnet-app-1}#"
+    },
+    {
+        "ParameterKey": "pASGSubnet2",
+        "ParameterValue": "#{subnet-app-2}#"
+    }
+]

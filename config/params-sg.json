@@ -1,0 +1,74 @@
+[
+    {
+        "ParameterKey": "pCidrFileTransfer",
+        "ParameterValue": "#{network-range-file-transfer}#"
+    },
+    {
+        "ParameterKey": "pCidrDatabaseTransfer",
+        "ParameterValue": "#{network-range-database-transfer}#"
+    },
+    {
+        "ParameterKey": "pCidrServiceIntegration",
+        "ParameterValue": "#{network-range-service-integration}#"
+    },
+    {
+        "ParameterKey": "pCidrApplicationService",
+        "ParameterValue": "#{network-range-application-service}#"
+    },
+    {
+        "ParameterKey": "pEnvironment",
+        "ParameterValue": "#{env}#"
+    },
+    {
+        "ParameterKey": "pScannerRangePrimary",
+        "ParameterValue": "#{network-range-scanner-primary}#"
+    },
+    {
+        "ParameterKey": "pScannerRangeSecondary",
+        "ParameterValue": "#{network-range-scanner-secondary}#"
+    },
+    {
+        "ParameterKey": "pAdminRangePrimary",
+        "ParameterValue": "#{network-range-admin-primary}#"
+    },
+    {
+        "ParameterKey": "pAdminRangeSecondary",
+        "ParameterValue": "#{network-range-admin-secondary}#"
+    },
+    {
+        "ParameterKey": "pAdminRangeContingency",
+        "ParameterValue": "#{network-range-admin-contingency}#"
+    },
+    {
+        "ParameterKey": "pInternalNetworkRange",
+        "ParameterValue": "#{network-range-internal}#"
+    },
+    {
+        "ParameterKey": "pIntegrationRange",
+        "ParameterValue": "#{network-range-integration}#"
+    },
+    {
+        "ParameterKey": "pIntegrationQaRange",
+        "ParameterValue": "#{network-range-integration-qa}#"
+    },
+    {
+        "ParameterKey": "pIntegrationDevRange",
+        "ParameterValue": "#{network-range-integration-dev}#"
+    },
+    {
+        "ParameterKey": "pManagementRange",
+        "ParameterValue": "#{network-range-management}#"
+    },
+    {
+        "ParameterKey": "pVpnAccessRange",
+        "ParameterValue": "#{network-range-vpn-access}#"
+    },
+    {
+        "ParameterKey": "pIntegrationIngressQaRange",
+        "ParameterValue": "#{network-range-integration-ingress-qa}#"
+    },
+    {
+        "ParameterKey": "pIntegrationIngressSecondaryRange",
+        "ParameterValue": "#{network-range-integration-ingress-secondary}#"
+    }
+]
